@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "annoyingmod",
+  "version": "1.0.0",
+  "name": "Annoying Mod",
+  "description": "Annoying client/integrated-server Fabric mod.",
+  "authors": ["Chromus Master"],
+  "license": "All-Rights-Reserved",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.example.annoyingmod.AnnoyingMod"],
+    "client": ["com.example.annoyingmod.AnnoyingModClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.2",
+    "minecraft": ">=1.21.1",
+    "fabric-api": "*",
+    "java": ">=21"
+  }
+}
