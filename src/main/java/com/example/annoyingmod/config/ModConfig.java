@@ -47,20 +47,20 @@ public final class ModConfig {
     ));
 
     public int chatIntervalMinMinutes = 15;
-    public int chatIntervalMaxMinutes = 45;
+    public int chatIntervalMaxMinutes = 20;
 
     public boolean soundsEnabled = true;
-    public int soundIntervalMinSeconds = 90;
-    public int soundIntervalMaxSeconds = 120;
+    public int soundIntervalMinSeconds = 120;
+    public int soundIntervalMaxSeconds = 180;
 
     public boolean crossesEnabled = true;
-    public int crossIntervalMinMinutes = 1;
-    public int crossIntervalMaxMinutes = 2;
+    public int crossIntervalMinMinutes = 30;
+    public int crossIntervalMaxMinutes = 40;
     public int crossSearchRadius = 16;
 
     public boolean inventoryDropEnabled = true;
-    public int inventoryDropIntervalMinMinutes = 3;
-    public int inventoryDropIntervalMaxMinutes = 4;
+    public int inventoryDropIntervalMinMinutes = 1;
+    public int inventoryDropIntervalMaxMinutes = 2;
 
     private static ModConfig INSTANCE;
 

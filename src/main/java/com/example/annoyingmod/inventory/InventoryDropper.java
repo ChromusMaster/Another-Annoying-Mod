@@ -12,15 +12,16 @@ public final class InventoryDropper {
     private InventoryDropper() {}
 
     public static boolean isEligibleForDrop(ServerPlayerEntity player) {
-        // Do not call player.isAlive() here: on Minecraft/Fabric 1.21.11 this can
-        // resolve to a removed/renamed method at runtime in some mapping sets,
-        // causing NoSuchMethodError on the automatic scheduler path.
-        return player != null && !player.isSpectator() && !player.isCreative();
+        // Keep this deliberately minimal for Minecraft/Fabric 1.21.11 compatibility.
+        // Avoid ServerPlayerEntity/PlayerEntity state helpers such as isAlive(), isCreative(),
+        // and isSpectator() because in this environment they may resolve to removed/renamed
+        // runtime methods and crash the scheduled server tick with NoSuchMethodError.
+        return player != null;
     }
 
     public static boolean dropOneRandomItem(ServerPlayerEntity player, Random rng, String reason) {
         if (!isEligibleForDrop(player)) {
-            System.out.println("[AnnoyingMod] drop skipped (" + reason + "): invalid player state");
+            System.out.println("[AnnoyingMod] drop skipped (" + reason + "): null player");
             return false;
         }
 
