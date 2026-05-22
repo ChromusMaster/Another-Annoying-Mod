@@ -3,64 +3,96 @@ package com.example.annoyingmod.config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.fabricmc.loader.api.FabricLoader;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class ModConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path PATH = FabricLoader.getInstance().getConfigDir().resolve("annoyingmod.json");
 
-    public List<String> chatMessages = new ArrayList<>(Arrays.asList(
-            "The forest whispers tonight...",
-            "Did you hear that?",
-            "Something moved in the dark.",
-            "You feel watched.",
-            "A cold wind passes. Oh, its just Fart.",
-            "A group chat is muting you silently.",
-            "A mysterious stain tells no lies.",
-            "A warm pizza vanishes.",
-            "A wild duplicate sock appears.",
-            "Did you pay the Wi-Fi bill?",
-            "Monday is closer than it seems.",
-            "Someone ate the last piece of cake.",
-            "Something crunches under the couch.",
-            "The GPS says, 'I told you so.'",
-            "The TV remote is gone.",
-            "The autocorrect changes the mood.",
-            "The bathroom scale clears its throat.",
-            "The cat remembers what you did.",
-            "The fridge is judging your life choices.",
-            "The printer senses your fear.",
-            "The toaster refuses to pop up.",
-            "You are being outsmarted by a pigeon.",
-            "You feel mildly inconvenienced.",
-            "You hear a spoiler in the distance.",
-            "You step on a Lego. In the dark.",
-            "Your alarm clock smirks at dawn.",
-            "Your leftovers are plotting revenge.",
-            "Your phone battery laughs softly.",
-            "Your sock has escaped again."
-    ));
+    private static final Set<String> ALLOWED_CROSS_BLOCKS = Set.of(
+            "minecraft:acacia_fence",
+            "minecraft:birch_fence",
+            "minecraft:oak_fence",
+            "minecraft:dark_oak_fence"
+    );
 
-    public int chatIntervalMinMinutes = 15;
-    public int chatIntervalMaxMinutes = 20;
+    private static final Set<String> DEFAULT_PROTECTED_ITEMS = Set.of(
+            "minecraft:ancient_debris",
+            "minecraft:netherite_scrap",
+            "minecraft:netherite_ingot",
+            "minecraft:netherite_block",
+            "minecraft:netherite_upgrade_smithing_template",
+            "minecraft:netherite_sword",
+            "minecraft:netherite_pickaxe",
+            "minecraft:netherite_axe",
+            "minecraft:netherite_shovel",
+            "minecraft:netherite_hoe",
+            "minecraft:netherite_helmet",
+            "minecraft:netherite_chestplate",
+            "minecraft:netherite_leggings",
+            "minecraft:netherite_boots",
+            "minecraft:elytra",
+            "minecraft:totem_of_undying"
+    );
+
+    public boolean messagesEnabled = true;
+    public int chatIntervalMinMinutes = 10;
+    public int chatIntervalMaxMinutes = 15;
 
     public boolean soundsEnabled = true;
-    public int soundIntervalMinSeconds = 120;
-    public int soundIntervalMaxSeconds = 180;
+    public int soundIntervalMinSeconds = 300;
+    public int soundIntervalMaxSeconds = 600;
 
     public boolean crossesEnabled = true;
-    public int crossIntervalMinMinutes = 30;
-    public int crossIntervalMaxMinutes = 40;
-    public int crossSearchRadius = 16;
+    public int crossIntervalMinMinutes = 20;
+    public int crossIntervalMaxMinutes = 30;
+    public int crossSearchRadius = 16; // kept only for backward JSON compatibility. Current placement ignores radius.
+    public List<String> crossBlocks = new ArrayList<>(Arrays.asList(
+            "minecraft:acacia_fence",
+            "minecraft:birch_fence",
+            "minecraft:oak_fence",
+            "minecraft:dark_oak_fence"
+    ));
 
     public boolean inventoryDropEnabled = true;
-    public int inventoryDropIntervalMinMinutes = 1;
-    public int inventoryDropIntervalMaxMinutes = 2;
+    public int inventoryDropIntervalMinMinutes = 40;
+    public int inventoryDropIntervalMaxMinutes = 60;
+
+    public List<String> dropProtectedItems = new ArrayList<>(Arrays.asList(
+            "minecraft:ancient_debris",
+            "minecraft:netherite_scrap",
+            "minecraft:netherite_ingot",
+            "minecraft:netherite_block",
+            "minecraft:netherite_upgrade_smithing_template",
+            "minecraft:netherite_sword",
+            "minecraft:netherite_pickaxe",
+            "minecraft:netherite_axe",
+            "minecraft:netherite_shovel",
+            "minecraft:netherite_hoe",
+            "minecraft:netherite_helmet",
+            "minecraft:netherite_chestplate",
+            "minecraft:netherite_leggings",
+            "minecraft:netherite_boots",
+            "minecraft:elytra",
+            "minecraft:totem_of_undying"
+    ));
+
+    public boolean dropArmor = true;
+    public boolean dropTools = true;
+    public boolean dropWeapons = true;
+    public boolean dropHotbar = true;
+    public boolean dropMainInventory = true;
+    public boolean dropOffhand = true;
+
+    public boolean debugLogging = false;
 
     private static ModConfig INSTANCE;
 
@@ -82,6 +114,7 @@ public final class ModConfig {
             } else {
                 INSTANCE = new ModConfig();
             }
+
             INSTANCE.sanitize();
             save();
             System.out.println("[AnnoyingMod] config loaded from " + PATH);
@@ -102,16 +135,56 @@ public final class ModConfig {
     }
 
     private void sanitize() {
-        if (chatMessages == null) chatMessages = new ArrayList<>();
-        if (chatMessages.size() > 255) chatMessages = new ArrayList<>(chatMessages.subList(0, 255));
         chatIntervalMinMinutes = Math.max(1, chatIntervalMinMinutes);
         chatIntervalMaxMinutes = Math.max(chatIntervalMinMinutes, chatIntervalMaxMinutes);
+
         soundIntervalMinSeconds = Math.max(1, soundIntervalMinSeconds);
         soundIntervalMaxSeconds = Math.max(soundIntervalMinSeconds, soundIntervalMaxSeconds);
+
         crossIntervalMinMinutes = Math.max(1, crossIntervalMinMinutes);
         crossIntervalMaxMinutes = Math.max(crossIntervalMinMinutes, crossIntervalMaxMinutes);
         crossSearchRadius = Math.max(1, Math.min(128, crossSearchRadius));
+        sanitizeCrossBlocks();
+
         inventoryDropIntervalMinMinutes = Math.max(1, inventoryDropIntervalMinMinutes);
         inventoryDropIntervalMaxMinutes = Math.max(inventoryDropIntervalMinMinutes, inventoryDropIntervalMaxMinutes);
+        sanitizeProtectedItems();
+    }
+
+    private void sanitizeCrossBlocks() {
+        if (crossBlocks == null) {
+            crossBlocks = new ArrayList<>();
+        }
+
+        LinkedHashSet<String> sanitized = new LinkedHashSet<>();
+        for (String id : crossBlocks) {
+            if (id == null) continue;
+            String normalized = id.trim().toLowerCase();
+            if (ALLOWED_CROSS_BLOCKS.contains(normalized)) {
+                sanitized.add(normalized);
+            }
+        }
+
+        if (sanitized.isEmpty()) {
+            sanitized.add("minecraft:acacia_fence");
+        }
+
+        crossBlocks = new ArrayList<>(sanitized);
+    }
+
+    private void sanitizeProtectedItems() {
+        if (dropProtectedItems == null) {
+            dropProtectedItems = new ArrayList<>();
+        }
+
+        LinkedHashSet<String> sanitized = new LinkedHashSet<>(DEFAULT_PROTECTED_ITEMS);
+        for (String id : dropProtectedItems) {
+            if (id == null) continue;
+            String normalized = id.trim().toLowerCase();
+            if (!normalized.isEmpty()) {
+                sanitized.add(normalized);
+            }
+        }
+        dropProtectedItems = new ArrayList<>(sanitized);
     }
 }

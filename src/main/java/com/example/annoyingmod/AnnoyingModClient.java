@@ -21,29 +21,66 @@ public final class AnnoyingModClient implements ClientModInitializer {
             try {
                 soundScheduler.onClientTick(client);
             } catch (Throwable t) {
-                System.err.println("[AnnoyingMod] client sound tick error: " + t.getClass().getName() + ": " + t.getMessage());
-                t.printStackTrace();
+                AnnoyingMod.logError("client sound tick error", t);
             }
         });
 
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
                 dispatcher.register(ClientCommandManager.literal("annoyingmodclient")
-                        .then(ClientCommandManager.literal("reload").executes(ctx -> {
-                            ModConfig.load();
-                            soundScheduler.reset();
-                            ctx.getSource().sendFeedback(Text.literal("[AnnoyingMod] client config reloaded"));
-                            return 1;
-                        }))
-                        .then(ClientCommandManager.literal("status").executes(ctx -> {
-                            ctx.getSource().sendFeedback(Text.literal(soundScheduler.statusText()));
-                            return 1;
-                        }))
+                        .then(ClientCommandManager.literal("reload")
+                                .executes(ctx -> {
+                                    try {
+                                        ModConfig.load();
+                                        soundScheduler.reset();
+                                        ctx.getSource().sendFeedback(Text.literal("OK"));
+                                        return 1;
+                                    } catch (Throwable t) {
+                                        AnnoyingMod.logError("client reload command failed", t);
+                                        ctx.getSource().sendFeedback(Text.literal("Error"));
+                                        return 0;
+                                    }
+                                }))
+                        .then(ClientCommandManager.literal("status")
+                                .executes(ctx -> {
+                                    try {
+                                        ModConfig cfg = ModConfig.get();
+                                        ctx.getSource().sendFeedback(Text.literal("[AnnoyingMod] clientSounds=" + cfg.soundsEnabled
+                                                + " " + cfg.soundIntervalMinSeconds + "-" + cfg.soundIntervalMaxSeconds + "s"
+                                                + ", debugLogging=" + cfg.debugLogging));
+                                        return 1;
+                                    } catch (Throwable t) {
+                                        AnnoyingMod.logError("client status command failed", t);
+                                        ctx.getSource().sendFeedback(Text.literal("Error"));
+                                        return 0;
+                                    }
+                                }))
+                        .then(ClientCommandManager.literal("debug")
+                                .executes(ctx -> {
+                                    try {
+                                        boolean ok = ClientSoundPlayer.playRandomNow();
+                                        AnnoyingMod.logAlways("client debug command executed: sound=" + ok);
+                                        ctx.getSource().sendFeedback(Text.literal(ok ? "OK" : "Warning"));
+                                        return ok ? 1 : 0;
+                                    } catch (Throwable t) {
+                                        AnnoyingMod.logError("client debug command failed", t);
+                                        ctx.getSource().sendFeedback(Text.literal("Error"));
+                                        return 0;
+                                    }
+                                }))
                         .then(ClientCommandManager.literal("test")
-                                .then(ClientCommandManager.literal("sound").executes(ctx -> {
-                                    boolean ok = ClientSoundPlayer.playRandomNow();
-                                    ctx.getSource().sendFeedback(Text.literal("[AnnoyingMod] test client sound: " + (ok ? "ok" : "failed")));
-                                    return ok ? 1 : 0;
-                                })))
+                                .then(ClientCommandManager.literal("sound")
+                                        .executes(ctx -> {
+                                            try {
+                                                boolean ok = ClientSoundPlayer.playRandomNow();
+                                                if (!ok) AnnoyingMod.logWarning("client sound test returned false");
+                                                ctx.getSource().sendFeedback(Text.literal(ok ? "OK" : "Warning"));
+                                                return ok ? 1 : 0;
+                                            } catch (Throwable t) {
+                                                AnnoyingMod.logError("client sound test failed", t);
+                                                ctx.getSource().sendFeedback(Text.literal("Error"));
+                                                return 0;
+                                            }
+                                        })))
                 )
         );
     }

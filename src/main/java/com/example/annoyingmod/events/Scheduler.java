@@ -1,79 +1,100 @@
 package com.example.annoyingmod.events;
 
+import com.example.annoyingmod.AnnoyingMod;
 import com.example.annoyingmod.config.ModConfig;
 import com.example.annoyingmod.inventory.InventoryDropper;
 import com.example.annoyingmod.world.CrossBuilder;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.entity.ItemEntity;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
+import net.minecraft.util.TypeFilter;
 import net.minecraft.text.Text;
 
+import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
 public final class Scheduler {
     public static final Random RNG = new Random();
 
+    private static final int CHAT_MESSAGE_COUNT = 48;
+    private static final long ITEM_CLEANUP_INTERVAL_SECONDS = 20L * 60L;
+
     private long serverTick = 0L;
     private long nextChatTick = -1L;
     private long nextCrossTick = -1L;
-
+    private long nextCrossCleanupTick = -1L;
     private Instant nextDropTime = null;
-    private long lastDropCheckTick = 0L;
+    private Instant nextItemCleanupTime = null;
 
     public void onServerTick(MinecraftServer server) {
         serverTick++;
         ModConfig cfg = ModConfig.get();
 
-        List<ServerPlayerEntity> players = server.getPlayerManager().getPlayerList();
-        if (players.isEmpty()) {
-            nextDropTime = null;
+        if (server.getPlayerManager().getPlayerList().isEmpty()) {
             return;
         }
 
-        if (nextChatTick < 0L) {
+        if (cfg.messagesEnabled && nextChatTick < 0L) {
             nextChatTick = serverTick + minutesToTicks(cfg.chatIntervalMinMinutes, cfg.chatIntervalMaxMinutes);
-            logNextTicks("chat", nextChatTick - serverTick);
+            AnnoyingMod.log("next chat in " + (nextChatTick - serverTick) + " ticks");
+        } else if (!cfg.messagesEnabled) {
+            nextChatTick = -1L;
         }
 
         if (cfg.crossesEnabled && nextCrossTick < 0L) {
             nextCrossTick = serverTick + minutesToTicks(cfg.crossIntervalMinMinutes, cfg.crossIntervalMaxMinutes);
-            logNextTicks("cross", nextCrossTick - serverTick);
+            AnnoyingMod.log("next cross in " + (nextCrossTick - serverTick) + " ticks");
         } else if (!cfg.crossesEnabled) {
             nextCrossTick = -1L;
         }
 
         if (cfg.inventoryDropEnabled && nextDropTime == null) {
-            nextDropTime = getNextDropTime(cfg);
-            logNextDrop();
+            scheduleNextDrop(cfg);
         } else if (!cfg.inventoryDropEnabled) {
             nextDropTime = null;
         }
 
-        if (serverTick >= nextChatTick) {
+        if (nextCrossCleanupTick < 0L) {
+            nextCrossCleanupTick = serverTick + secondsToTicks(30, 30);
+        }
+
+        if (nextItemCleanupTime == null) {
+            nextItemCleanupTime = Instant.now().plusSeconds(ITEM_CLEANUP_INTERVAL_SECONDS);
+            AnnoyingMod.log("next item cleanup in " + ITEM_CLEANUP_INTERVAL_SECONDS + " seconds");
+        }
+
+        if (cfg.messagesEnabled && serverTick >= nextChatTick) {
             fireChat(server);
             nextChatTick = serverTick + minutesToTicks(cfg.chatIntervalMinMinutes, cfg.chatIntervalMaxMinutes);
-            logNextTicks("chat", nextChatTick - serverTick);
+            AnnoyingMod.log("next chat in " + (nextChatTick - serverTick) + " ticks");
         }
 
         if (cfg.crossesEnabled && serverTick >= nextCrossTick) {
             ServerPlayerEntity player = getPrimaryPlayer(server);
-            boolean ok = player != null && CrossBuilder.buildTwoBlocksAhead(player);
-            System.out.println("[AnnoyingMod] scheduled cross: " + (ok ? "ok" : "skipped"));
+            boolean ok = player != null && CrossBuilder.buildTwoBlocksAhead(player, RNG);
+            AnnoyingMod.log("scheduled cross: " + (ok ? "ok" : "skipped"));
             nextCrossTick = serverTick + minutesToTicks(cfg.crossIntervalMinMinutes, cfg.crossIntervalMaxMinutes);
-            logNextTicks("cross", nextCrossTick - serverTick);
+            AnnoyingMod.log("next cross in " + (nextCrossTick - serverTick) + " ticks");
         }
 
-        if (cfg.inventoryDropEnabled && serverTick - lastDropCheckTick >= 20L) {
-            lastDropCheckTick = serverTick;
-            if (nextDropTime != null && !Instant.now().isBefore(nextDropTime)) {
-                boolean ok = fireDropNow(server, "scheduled");
-                System.out.println("[AnnoyingMod] scheduled drop: " + (ok ? "ok" : "skipped"));
-                nextDropTime = getNextDropTime(cfg);
-                logNextDrop();
-            }
+        if (cfg.inventoryDropEnabled && nextDropTime != null && !Instant.now().isBefore(nextDropTime)) {
+            boolean ok = fireDropNow(server, "scheduled");
+            AnnoyingMod.log("scheduled drop: " + (ok ? "ok" : "skipped"));
+            scheduleNextDrop(cfg);
+        }
+
+        if (serverTick >= nextCrossCleanupTick) {
+            CrossBuilder.cleanupExpired(server);
+            nextCrossCleanupTick = serverTick + secondsToTicks(30, 30);
+        }
+
+        if (nextItemCleanupTime != null && !Instant.now().isBefore(nextItemCleanupTime)) {
+            cleanupDroppedItems(server);
+            nextItemCleanupTime = Instant.now().plusSeconds(ITEM_CLEANUP_INTERVAL_SECONDS);
+            AnnoyingMod.log("next item cleanup in " + ITEM_CLEANUP_INTERVAL_SECONDS + " seconds");
         }
     }
 
@@ -81,46 +102,42 @@ public final class Scheduler {
         serverTick = 0L;
         nextChatTick = -1L;
         nextCrossTick = -1L;
+        nextCrossCleanupTick = -1L;
         nextDropTime = null;
-        lastDropCheckTick = 0L;
-        System.out.println("[AnnoyingMod] scheduler reset");
+        nextItemCleanupTime = null;
     }
 
-    public String statusText() {
-        long nextChat = nextChatTick < 0L ? -1L : nextChatTick - serverTick;
-        long nextCross = nextCrossTick < 0L ? -1L : nextCrossTick - serverTick;
-        long nextDropSeconds = nextDropTime == null ? -1L : Math.max(0L, nextDropTime.getEpochSecond() - Instant.now().getEpochSecond());
+    public String status() {
+        ModConfig cfg = ModConfig.get();
+        long nextDropSeconds = nextDropTime == null ? -1L : Math.max(0L, Duration.between(Instant.now(), nextDropTime).toSeconds());
+        long nextItemCleanupSeconds = nextItemCleanupTime == null ? -1L : Math.max(0L, Duration.between(Instant.now(), nextItemCleanupTime).toSeconds());
+        long crossRecords = CrossBuilder.trackedCrossCount();
 
-        return "[AnnoyingMod] tick=" + serverTick
-                + ", nextChat=" + nextChat + " ticks"
-                + ", nextCross=" + nextCross + " ticks"
-                + ", nextDrop=" + nextDropSeconds + " seconds"
-                + ", dropMode=wall-clock";
+        return "[AnnoyingMod] messages=" + cfg.messagesEnabled + " " + cfg.chatIntervalMinMinutes + "-" + cfg.chatIntervalMaxMinutes + "min"
+                + ", clientSounds=" + cfg.soundsEnabled + " " + cfg.soundIntervalMinSeconds + "-" + cfg.soundIntervalMaxSeconds + "s"
+                + ", crosses=" + cfg.crossesEnabled + " " + cfg.crossIntervalMinMinutes + "-" + cfg.crossIntervalMaxMinutes + "min"
+                + ", trackedCrosses=" + crossRecords
+                + ", drop=" + cfg.inventoryDropEnabled + " " + cfg.inventoryDropIntervalMinMinutes + "-" + cfg.inventoryDropIntervalMaxMinutes + "min"
+                + ", nextDropSeconds=" + nextDropSeconds
+                + ", nextItemCleanupSeconds=" + nextItemCleanupSeconds
+                + ", debugLogging=" + cfg.debugLogging;
     }
 
-    public static boolean fireDropNow(MinecraftServer server, String reason) {
-        List<ServerPlayerEntity> eligible = new ArrayList<>();
-        for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
-            if (InventoryDropper.isEligibleForDrop(player)) {
-                eligible.add(player);
-            }
-        }
-
-        if (eligible.isEmpty()) {
-            System.out.println("[AnnoyingMod] drop skipped (" + reason + "): no eligible players");
+    public boolean fireDropNow(MinecraftServer server, String reason) {
+        List<ServerPlayerEntity> players = server.getPlayerManager().getPlayerList();
+        if (players.isEmpty()) {
+            AnnoyingMod.logAlways("WARNING drop skipped (" + reason + "): no players online");
             return false;
         }
 
-        Collections.shuffle(eligible, RNG);
+        ServerPlayerEntity player = players.get(0);
+        return InventoryDropper.dropOneRandomItem(player, RNG, reason);
+    }
 
-        for (ServerPlayerEntity player : eligible) {
-            if (InventoryDropper.dropOneRandomItem(player, RNG, reason)) {
-                return true;
-            }
-        }
-
-        System.out.println("[AnnoyingMod] drop skipped (" + reason + "): all eligible players had no droppable inventory slots");
-        return false;
+    private void scheduleNextDrop(ModConfig cfg) {
+        int seconds = randomBetween(cfg.inventoryDropIntervalMinMinutes * 60, cfg.inventoryDropIntervalMaxMinutes * 60);
+        nextDropTime = Instant.now().plusSeconds(seconds);
+        AnnoyingMod.log("next drop in " + seconds + " seconds");
     }
 
     private static ServerPlayerEntity getPrimaryPlayer(MinecraftServer server) {
@@ -129,27 +146,29 @@ public final class Scheduler {
     }
 
     private static void fireChat(MinecraftServer server) {
-        ModConfig cfg = ModConfig.get();
-        List<String> messages = cfg.chatMessages;
-        if (messages == null || messages.isEmpty()) {
-            System.out.println("[AnnoyingMod] chat skipped: empty message list");
-            return;
+        int index = RNG.nextInt(CHAT_MESSAGE_COUNT) + 1;
+        String key = String.format("annoyingmod.chat.%02d", index);
+        server.getPlayerManager().broadcast(Text.translatable(key), false);
+        AnnoyingMod.log("chat fired: " + key);
+    }
+
+    private static void cleanupDroppedItems(MinecraftServer server) {
+        int removed = 0;
+
+        try {
+            for (ServerWorld world : server.getWorlds()) {
+                List<? extends ItemEntity> items = world.getEntitiesByType(TypeFilter.instanceOf(ItemEntity.class), item -> true);
+
+                for (ItemEntity item : items) {
+                    item.discard();
+                    removed++;
+                }
+            }
+
+            AnnoyingMod.log("item cleanup executed: removed=" + removed);
+        } catch (Throwable t) {
+            AnnoyingMod.logError("item cleanup failed", t);
         }
-        String msg = messages.get(RNG.nextInt(messages.size()));
-        server.getPlayerManager().broadcast(Text.literal(msg), false);
-        System.out.println("[AnnoyingMod] chat fired: " + msg);
-    }
-
-    private static Instant getNextDropTime(ModConfig cfg) {
-        int minSeconds = Math.max(1, cfg.inventoryDropIntervalMinMinutes) * 60;
-        int maxSeconds = Math.max(cfg.inventoryDropIntervalMinMinutes, cfg.inventoryDropIntervalMaxMinutes) * 60;
-        int chosenSeconds = minSeconds + RNG.nextInt(maxSeconds - minSeconds + 1);
-        return Instant.now().plusSeconds(chosenSeconds);
-    }
-
-    private void logNextDrop() {
-        long seconds = nextDropTime == null ? -1L : Math.max(0L, nextDropTime.getEpochSecond() - Instant.now().getEpochSecond());
-        System.out.println("[AnnoyingMod] next drop in " + seconds + " seconds");
     }
 
     private static long minutesToTicks(int min, int max) {
@@ -157,13 +176,12 @@ public final class Scheduler {
     }
 
     private static long secondsToTicks(int min, int max) {
-        int realMin = Math.max(1, min);
-        int realMax = Math.max(realMin, max);
-        int chosen = realMin + RNG.nextInt(realMax - realMin + 1);
-        return chosen * 20L;
+        return (long) randomBetween(min, max) * 20L;
     }
 
-    private static void logNextTicks(String event, long ticks) {
-        System.out.println("[AnnoyingMod] next " + event + " in " + ticks + " ticks");
+    private static int randomBetween(int min, int max) {
+        int realMin = Math.max(1, min);
+        int realMax = Math.max(realMin, max);
+        return realMin + RNG.nextInt(realMax - realMin + 1);
     }
 }
