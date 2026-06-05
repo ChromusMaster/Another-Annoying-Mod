@@ -16,7 +16,10 @@ out/
 *.ipr
 *.iws
 *.md
+<<<<<<< HEAD
 *.sql
+=======
+>>>>>>> 5569a230179202c9b12b9908df83ba820a3143bf
 # Eclipse
 
 .project
