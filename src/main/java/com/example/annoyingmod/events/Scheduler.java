@@ -3,6 +3,7 @@ package com.example.annoyingmod.events;
 import com.example.annoyingmod.AnnoyingMod;
 import com.example.annoyingmod.config.ModConfig;
 import com.example.annoyingmod.inventory.InventoryDropper;
+import com.example.annoyingmod.sound.ServerCustomSoundController;
 import com.example.annoyingmod.world.CrossBuilder;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.entity.ItemEntity;
@@ -29,9 +30,13 @@ public final class Scheduler {
     private Instant nextDropTime = null;
     private Instant nextItemCleanupTime = null;
 
+    private final ServerCustomSoundController customSounds = ServerCustomSoundController.GLOBAL;
+
     public void onServerTick(MinecraftServer server) {
         serverTick++;
         ModConfig cfg = ModConfig.get();
+
+        customSounds.onServerTick(server);
 
         if (server.getPlayerManager().getPlayerList().isEmpty()) {
             return;
@@ -105,6 +110,7 @@ public final class Scheduler {
         nextCrossCleanupTick = -1L;
         nextDropTime = null;
         nextItemCleanupTime = null;
+        customSounds.reset();
     }
 
     public String status() {
@@ -115,6 +121,7 @@ public final class Scheduler {
 
         return "[AnnoyingMod] messages=" + cfg.messagesEnabled + " " + cfg.chatIntervalMinMinutes + "-" + cfg.chatIntervalMaxMinutes + "min"
                 + ", clientSounds=" + cfg.soundsEnabled + " " + cfg.soundIntervalMinSeconds + "-" + cfg.soundIntervalMaxSeconds + "s"
+                + ", customSounds=" + cfg.customSoundsEnabled + " " + cfg.customSoundIntervalMinSeconds + "-" + cfg.customSoundIntervalMaxSeconds + "s"
                 + ", crosses=" + cfg.crossesEnabled + " " + cfg.crossIntervalMinMinutes + "-" + cfg.crossIntervalMaxMinutes + "min"
                 + ", trackedCrosses=" + crossRecords
                 + ", drop=" + cfg.inventoryDropEnabled + " " + cfg.inventoryDropIntervalMinMinutes + "-" + cfg.inventoryDropIntervalMaxMinutes + "min"

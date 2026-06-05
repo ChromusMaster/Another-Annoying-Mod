@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "annoyingmod",
-  "version": "1.0.0",
+  "version": "${version}",
   "name": "Annoying Mod",
   "icon": "assets/annoyingmod/icon.png",
   "description": "Small client/integrated-server annoyance mod.",

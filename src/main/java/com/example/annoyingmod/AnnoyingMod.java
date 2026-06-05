@@ -1,17 +1,27 @@
 package com.example.annoyingmod;
 
+import com.example.annoyingmod.block.ModBlocks;
 import com.example.annoyingmod.config.ModConfig;
 import com.example.annoyingmod.events.Scheduler;
 import com.example.annoyingmod.inventory.InventoryDropper;
+import com.example.annoyingmod.sound.ModSounds;
+import com.example.annoyingmod.sound.ServerCustomSoundController;
 import com.example.annoyingmod.world.CrossBuilder;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.block.BedBlock;
+import net.minecraft.util.ActionResult;
 import net.minecraft.text.Text;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.registry.Registries;
+import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 
 public final class AnnoyingMod implements ModInitializer {
     public static final String MOD_ID = "annoyingmod";
@@ -22,6 +32,21 @@ public final class AnnoyingMod implements ModInitializer {
     public void onInitialize() {
         System.out.println("[AnnoyingMod] initializing server/common side");
         ModConfig.load();
+        ModBlocks.initialize();
+        ModSounds.initialize();
+
+        UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
+            try {
+                if (!world.isClient() && world.getBlockState(hitResult.getBlockPos()).getBlock() instanceof BedBlock && player instanceof ServerPlayerEntity serverPlayer) {
+                    if (ServerCustomSoundController.GLOBAL.shouldBlockSleepAndPlay(serverPlayer)) {
+                        return ActionResult.FAIL;
+                    }
+                }
+            } catch (Throwable t) {
+                logError("sleep block custom sound check failed", t);
+            }
+            return ActionResult.PASS;
+        });
 
         ServerLifecycleEvents.SERVER_STARTED.register(server -> {
             ModConfig.load();
@@ -98,9 +123,10 @@ public final class AnnoyingMod implements ModInitializer {
                                         ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
                                         boolean dropOk = InventoryDropper.dropOneRandomItem(player, Scheduler.RNG, "debug");
                                         boolean crossOk = CrossBuilder.buildTwoBlocksAhead(player, Scheduler.RNG);
-                                        logAlways("debug command executed: drop=" + dropOk + ", cross=" + crossOk);
-                                        feedback(ctx.getSource(), (dropOk || crossOk) ? "OK" : "Warning");
-                                        return (dropOk || crossOk) ? 1 : 0;
+                                        boolean customOk = ServerCustomSoundController.GLOBAL.playRandomCustomNow(player);
+                                        logAlways("debug command executed: drop=" + dropOk + ", cross=" + crossOk + ", customSound=" + customOk);
+                                        feedback(ctx.getSource(), (dropOk || crossOk || customOk) ? "OK" : "Warning");
+                                        return (dropOk || crossOk || customOk) ? 1 : 0;
                                     } catch (Throwable t) {
                                         logError("debug command failed", t);
                                         feedback(ctx.getSource(), "Error");
@@ -138,9 +164,39 @@ public final class AnnoyingMod implements ModInitializer {
                                         }))
                                 .then(CommandManager.literal("sound")
                                         .executes(ctx -> {
-                                            logWarning("server-side sound test requested; sound is client-side. Use /annoyingmodclient test sound");
-                                            feedback(ctx.getSource(), "Warning");
-                                            return 0;
+                                            try {
+                                                ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+                                                player.networkHandler.sendPacket(new PlaySoundS2CPacket(
+                                                        Registries.SOUND_EVENT.getEntry(SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP),
+                                                        SoundCategory.MASTER,
+                                                        player.getX(),
+                                                        player.getY(),
+                                                        player.getZ(),
+                                                        1.0F,
+                                                        1.0F,
+                                                        Scheduler.RNG.nextLong()
+                                                ));
+                                                feedback(ctx.getSource(), "OK");
+                                                return 1;
+                                            } catch (Throwable t) {
+                                                logError("server vanilla sound test failed", t);
+                                                feedback(ctx.getSource(), "Error");
+                                                return 0;
+                                            }
+                                        }))
+                                .then(CommandManager.literal("custom_sound")
+                                        .executes(ctx -> {
+                                            try {
+                                                ServerPlayerEntity player = ctx.getSource().getPlayerOrThrow();
+                                                boolean ok = ServerCustomSoundController.GLOBAL.playTestCustomNow(player);
+                                                if (!ok) logWarning("manual custom sound test returned false");
+                                                feedback(ctx.getSource(), ok ? "OK" : "Warning");
+                                                return ok ? 1 : 0;
+                                            } catch (Throwable t) {
+                                                logError("manual custom sound test failed", t);
+                                                feedback(ctx.getSource(), "Error");
+                                                return 0;
+                                            }
                                         }))
                         )
                 )

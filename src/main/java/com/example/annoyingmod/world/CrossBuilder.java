@@ -1,14 +1,12 @@
 package com.example.annoyingmod.world;
 
 import com.example.annoyingmod.AnnoyingMod;
-import com.example.annoyingmod.config.ModConfig;
-import net.minecraft.block.Block;
+import com.example.annoyingmod.block.ModBlocks;
 import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
-import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
 import net.minecraft.world.World;
@@ -27,14 +25,14 @@ public final class CrossBuilder {
 
     private CrossBuilder() {}
 
-    private record CrossRecord(RegistryKey<World> worldKey, List<BlockPos> blocks, long createdAtMs) {}
+    private record CrossRecord(RegistryKey<World> worldKey, BlockPos base, long createdAtMs) {}
 
     public static boolean buildTwoBlocksAhead(ServerPlayerEntity player, Random rng) {
         if (player == null) {
             return false;
         }
 
-        ServerWorld world = player.getServerWorld();
+        ServerWorld world = player.getEntityWorld();
         BlockPos playerFeet = player.getBlockPos();
 
         if (hasCeilingAbove(world, playerFeet, "player")) {
@@ -69,14 +67,14 @@ public final class CrossBuilder {
             return false;
         }
 
-        BlockState crossBlock = pickCrossBlock(rng).getDefaultState();
-        List<BlockPos> placed = place(world, base, facing, crossBlock);
-        trackCross(world, placed);
+        BlockState crossBlock = ModBlocks.ANNOYING_CROSS.getDefaultState();
+        world.setBlockState(base, crossBlock, 3);
+        trackCross(world, base);
 
         AnnoyingMod.log("cross fired: player=" + player.getName().getString()
                 + ", base=" + format(base)
-                + ", armAxis=" + facing.getName()
-                + ", block=" + blockId(crossBlock.getBlock()));
+                + ", armAxis=" + facing.asString()
+                + ", block=annoyingmod:annoying_cross");
 
         return true;
     }
@@ -104,19 +102,13 @@ public final class CrossBuilder {
                 continue;
             }
 
-            if (!hasNearbyPlayer(world, record)) {
-                // Chunks outside active player range are not touched. Keep the record and retry later.
+            if (!hasNearbyPlayer(world, record.base)) {
                 continue;
             }
 
-            for (BlockPos pos : record.blocks) {
-                if (!world.isInBuildLimit(pos)) {
-                    continue;
-                }
-                if (isKnownCrossBlock(world.getBlockState(pos).getBlock())) {
-                    world.setBlockState(pos, Blocks.AIR.getDefaultState(), 3);
-                    removedBlocks++;
-                }
+            if (world.isInBuildLimit(record.base) && world.getBlockState(record.base).getBlock() == ModBlocks.ANNOYING_CROSS) {
+                world.removeBlock(record.base, false);
+                removedBlocks++;
             }
 
             iterator.remove();
@@ -142,8 +134,7 @@ public final class CrossBuilder {
                 break;
             }
 
-            BlockState state = world.getBlockState(pos);
-            if (!state.isAir()) {
+            if (!world.getBlockState(pos).isAir()) {
                 AnnoyingMod.logWarning("cross skipped: ceiling detected above " + source + " at " + format(pos));
                 return true;
             }
@@ -172,71 +163,20 @@ public final class CrossBuilder {
         return world.isInBuildLimit(pos) && world.getBlockState(pos).isReplaceable();
     }
 
-    private static List<BlockPos> place(ServerWorld world, BlockPos base, Direction facing, BlockState crossBlock) {
-        Direction left = facing.rotateYCounterclockwise();
-        Direction right = facing.rotateYClockwise();
-
-        List<BlockPos> positions = List.of(
-                base,
-                base.up(),
-                base.up(2),
-                base.up(2).offset(left),
-                base.up(2).offset(right)
-        );
-
-        for (BlockPos pos : positions) {
-            world.setBlockState(pos, crossBlock, 3);
-        }
-
-        return new ArrayList<>(positions);
-    }
-
-    private static Block pickCrossBlock(Random rng) {
-        List<String> configured = ModConfig.get().crossBlocks;
-        String id = configured.get(rng.nextInt(configured.size()));
-
-        return switch (id) {
-            case "minecraft:birch_fence" -> Blocks.BIRCH_FENCE;
-            case "minecraft:oak_fence" -> Blocks.OAK_FENCE;
-            case "minecraft:dark_oak_fence" -> Blocks.DARK_OAK_FENCE;
-            case "minecraft:acacia_fence" -> Blocks.ACACIA_FENCE;
-            default -> Blocks.ACACIA_FENCE;
-        };
-    }
-
-    private static void trackCross(ServerWorld world, List<BlockPos> positions) {
+    private static void trackCross(ServerWorld world, BlockPos base) {
         if (TRACKED_CROSSES.size() >= MAX_TRACKED_CROSSES) {
             TRACKED_CROSSES.remove(0);
         }
-        TRACKED_CROSSES.add(new CrossRecord(world.getRegistryKey(), positions, System.currentTimeMillis()));
+        TRACKED_CROSSES.add(new CrossRecord(world.getRegistryKey(), base.toImmutable(), System.currentTimeMillis()));
     }
 
-    private static boolean hasNearbyPlayer(ServerWorld world, CrossRecord record) {
-        if (record.blocks.isEmpty()) {
-            return true;
-        }
-
-        BlockPos center = record.blocks.get(0);
+    private static boolean hasNearbyPlayer(ServerWorld world, BlockPos center) {
         for (ServerPlayerEntity player : world.getPlayers()) {
             if (player.getBlockPos().getSquaredDistance(center) <= CLEANUP_PLAYER_DISTANCE_SQUARED) {
                 return true;
             }
         }
         return false;
-    }
-
-    private static boolean isKnownCrossBlock(Block block) {
-        return block == Blocks.ACACIA_FENCE
-                || block == Blocks.BIRCH_FENCE
-                || block == Blocks.OAK_FENCE
-                || block == Blocks.DARK_OAK_FENCE;
-    }
-
-    private static String blockId(Block block) {
-        if (block == Blocks.BIRCH_FENCE) return "minecraft:birch_fence";
-        if (block == Blocks.OAK_FENCE) return "minecraft:oak_fence";
-        if (block == Blocks.DARK_OAK_FENCE) return "minecraft:dark_oak_fence";
-        return "minecraft:acacia_fence";
     }
 
     private static String format(BlockPos pos) {

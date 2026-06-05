@@ -51,6 +51,10 @@ public final class ModConfig {
     public int soundIntervalMinSeconds = 300;
     public int soundIntervalMaxSeconds = 600;
 
+    public boolean customSoundsEnabled = true;
+    public int customSoundIntervalMinSeconds = 180;
+    public int customSoundIntervalMaxSeconds = 300;
+
     public boolean crossesEnabled = true;
     public int crossIntervalMinMinutes = 20;
     public int crossIntervalMaxMinutes = 30;
@@ -140,6 +144,9 @@ public final class ModConfig {
 
         soundIntervalMinSeconds = Math.max(1, soundIntervalMinSeconds);
         soundIntervalMaxSeconds = Math.max(soundIntervalMinSeconds, soundIntervalMaxSeconds);
+
+        customSoundIntervalMinSeconds = Math.max(30, customSoundIntervalMinSeconds);
+        customSoundIntervalMaxSeconds = Math.max(customSoundIntervalMinSeconds, customSoundIntervalMaxSeconds);
 
         crossIntervalMinMinutes = Math.max(1, crossIntervalMinMinutes);
         crossIntervalMaxMinutes = Math.max(crossIntervalMinMinutes, crossIntervalMaxMinutes);

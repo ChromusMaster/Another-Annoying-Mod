@@ -2,6 +2,7 @@ package com.example.annoyingmod.inventory;
 
 import com.example.annoyingmod.AnnoyingMod;
 import com.example.annoyingmod.config.ModConfig;
+import com.example.annoyingmod.sound.ServerCustomSoundController;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -46,6 +47,7 @@ public final class InventoryDropper {
         }
 
         player.dropItem(removed, false, false);
+        ServerCustomSoundController.GLOBAL.onValuableItemDropped(player, removed);
 
         inventory.markDirty();
         inventory.updateItems();
