@@ -1,0 +1,1 @@
+Annoying Cross model replacement integrated. CrossBuilder now places annoyingmod:annoying_cross instead of fence structures. The JSON setting crossBlocks is retained only for backward compatibility and is no longer used.

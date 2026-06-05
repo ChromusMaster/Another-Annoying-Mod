@@ -1,0 +1,115 @@
+# Gradle
+
+.gradle/
+build/
+out/
+
+# Gradle wrapper cache/output
+
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+
+# IntelliJ IDEA
+
+.idea/
+*.iml
+*.ipr
+*.iws
+*.md
+# Eclipse
+
+.project
+.classpath
+.settings/
+bin/
+
+# VS Code
+
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Minecraft/Fabric generated files
+
+run/
+logs/
+crash-reports/
+saves/
+config/
+resourcepacks/
+shaderpacks/
+screenshots/
+options.txt
+optionsof.txt
+servers.dat
+usercache.json
+usernamecache.json
+
+# Loom / remapped / generated artifacts
+
+remappedSrc/
+remappedClasses/
+*.accesswidener.tmp
+
+# Java
+
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+replay_pid*
+
+# OS files
+
+.DS_Store
+Thumbs.db
+
+# Temporary files
+
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.swp
+*.swo
+*~
+
+# Archives generated during development
+
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+
+# Local notes / test files
+
+latest.log
+debug.log
+stdout-logs.txt
+stderr_stream.log
+crash_assistant_app.log
+startup_scripts.log
+modlist.txt
+
+# Audio source files before conversion
+
+*.mp3
+*.wav
+*.flac
+
+# Keep final Minecraft sound assets
+
+!src/main/resources/assets/annoyingmod/sounds/*.ogg
+
+# Keep mod resources
+
+!src/main/resources/assets/
+!src/main/resources/fabric.mod.json
+
+# Environment files
+
+.env
+.env.*
